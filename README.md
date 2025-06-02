@@ -42,17 +42,7 @@ TBD
 ## Getting Started
 ### Installation
 
-### 1. Preparação e Configuração
-- [ ] Baixar/colocar em pasta os arquivos do projeto (`ds.h`, `ds.c`, `fat.h`, `fat.c`, `cmd.c`, `Makefile`)
-- [ ] Ler e entender a simulação de disco (`ds_init`, `ds_read`, `ds_write`, `ds_close`)
-- [ ] Analisar as estruturas em `fat.h`/`fat.c` (superbloco, diretório, FAT)
-- [ ] Examinar o `Makefile` e testar comandos:
-  - [ ] `make img` (gera disco vazio)
-  - [ ] `make dev` (usa disco de exemplo com N=20 e 3 arquivos)
-- [ ] Configurar editor/IDE para C e apontar para headers e bibliotecas necessárias
-
-
-### 2. Implementação de Formatação, Montagem e Debug
+### 1. Implementação de Formatação, Montagem e Debug
 - [ ] Implementar `fat_format()`
   - [ ] Verificar se `mountState == 1` (se já montado, retornar erro)
   - [ ] Preencher `sb.magic = MAGIC_N`
@@ -85,7 +75,7 @@ TBD
   - [ ] Se `mountState == 1`, usar `sb`, `fat[]`, `dir[]` em RAM para exibir mesmas informações
 
 
-### 3. Operações de Diretório: Criar e Deletar Arquivos
+### 2. Operações de Diretório: Criar e Deletar Arquivos
 - [ ] Implementar `fat_create(char *name)`
   - [ ] Verificar `mountState == 1`; se não, erro
   - [ ] Verificar que `strlen(name) ≤ 6`; se não, erro
@@ -117,14 +107,14 @@ TBD
   - [ ] Retornar 0
 
 
-### 4. Função de Tamanho de Arquivo
+### 3. Função de Tamanho de Arquivo
 - [ ] Implementar `fat_getsize(char *name)`
   - [ ] Verificar `mountState == 1`; se não, erro
   - [ ] Buscar `dir[i]` com `name`; se não encontrar, erro
   - [ ] Retornar `dir[i].length`
 
 
-### 5. Leitura de Arquivo (fat_read)
+### 4. Leitura de Arquivo (fat_read)
 - [ ] Implementar `fat_read(char *name, char *buff, int length, int offset)`
   - [ ] Verificar `mountState == 1`; se não, erro
   - [ ] Buscar `dir[i]`; se não achar, erro
@@ -146,7 +136,7 @@ TBD
   - [ ] Retornar `total_lido`
 
 
-### 6. Escrita em Arquivo (fat_write)
+### 5. Escrita em Arquivo (fat_write)
 - [ ] Implementar `fat_write(char *name, const char *buff, int length, int offset)`
   - [ ] Verificar `mountState == 1`; se não, erro
   - [ ] Buscar `dir[i]`; se não achar, erro
@@ -188,7 +178,7 @@ TBD
   - [ ] `static void write_dir_to_disk()` — copia `dir[]` em bloco 1
 
 
-### 7. Testes e Validação
+### 6. Testes e Validação
 - [ ] Recompilar com `make clean && make dev`
 - [ ] Testar `formatar` em disco vazio (`make img`, depois `formatar`)
   - [ ] Verificar via `hexdump -C disco.img` se superbloco foi gravado corretamente
@@ -214,7 +204,7 @@ TBD
 - [ ] Validar estatísticas de `ds_close()` (nº de leituras e escritas) para garantir coerência
 
 
-### 8. Documentação e Organização Final
+### 7. Documentação e Organização Final
 - [ ] Adicionar comentários em cada função explicando parâmetros, retornos e efeitos
 - [ ] Verificar vazamentos de memória (uso de `malloc`/`free`)
 - [ ] Ajustar `Makefile` se necessário para incluir flags de compilação adicionais (ex.: `-Wall -Wextra`)
