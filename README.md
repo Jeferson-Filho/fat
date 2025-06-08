@@ -66,7 +66,7 @@ TBD
 <!-- CONTACT -->
 ## Contact
 
-Gabriella <br>
+Gabriella Alves <br>
 [![LinkedIn][linkedin-shield]][gabriella-linkedin-url]
 
 Jeferson Filho <br>
