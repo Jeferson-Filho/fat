@@ -56,59 +56,54 @@ int find_free_block() {
 
 
 int fat_format() {
-	printf("===== fat_format() =====\n");
-	if (mountState) return -1;
+    if (mountState) return -1;
 
-	// Obtém o número total de blocos
-	int n_blocks = ds_size();
-	if (n_blocks < 4) return -1; // mínimo: super + dir + FAT + 1 dado
+    int n_blocks = ds_size();
+    if (n_blocks < 4) return -1;
 
-	// Calcula o número de blocos da FAT
-	int fat_entries_per_block = BLOCK_SIZE / sizeof(unsigned int);
-	int fat_total_entries = n_blocks;
-	int n_fat_blocks = (fat_total_entries + fat_entries_per_block - 1) / fat_entries_per_block;
+    // Calcular quantos blocos a FAT ocupa
+    int fat_entries_per_block = BLOCK_SIZE / sizeof(unsigned int);
+    int n_fat_blocks = (n_blocks + fat_entries_per_block - 1) / fat_entries_per_block;
 
-	// Preenche o superbloco
-	sb.magic = MAGIC_N;
-	sb.number_blocks = n_blocks;
-	sb.n_fat_blocks = n_fat_blocks;
-	memset(sb.empty, 0, sizeof(sb.empty));
-	ds_write(SUPER, (char *)&sb);
+    // Superbloco
+    sb.magic = MAGIC_N;
+    sb.number_blocks = n_blocks;
+    sb.n_fat_blocks = n_fat_blocks;
+    memset(sb.empty, 0, sizeof(sb.empty));
+    ds_write(SUPER, (char *)&sb);
 
-	// Zera o diretório
-	for (int i = 0; i < N_ITEMS; i++) {
-		dir[i].used = NON_OK;
-		memset(dir[i].name, 0, MAX_LETTERS + 1);
-		dir[i].length = 0;
-		dir[i].first = (unsigned int)-1;
-	}
-	ds_write(DIR, (char *)dir);
+    // Diretório
+    for (int i = 0; i < N_ITEMS; i++) {
+        dir[i].used = NON_OK;
+        memset(dir[i].name, 0, MAX_LETTERS + 1);
+        dir[i].length = 0;
+        dir[i].first = (unsigned int)-1;
+    }
+    ds_write(DIR, (char *)dir);
 
+    // FAT
+    fat = malloc(n_blocks * sizeof(unsigned int));
+    if (!fat) return -1;
 
-	// Inicializa e escreve a FAT
-	fat = malloc(n_blocks * sizeof(unsigned int));
-	if (!fat) return -1;
+    for (int i = 0; i < n_blocks; i++) {
+        fat[i] = FREE;
+    }
 
-	for (int i = 0; i < n_blocks; i++) {
-		fat[i] = FREE;
-	}
+    // Reservar blocos do sistema
+    fat[SUPER] = BUSY;
+    fat[DIR] = BUSY;
+    for (int i = 0; i < n_fat_blocks; i++) {
+        fat[TABLE + i] = BUSY;
+    }
 
-	// Reservar blocos do sistema
-	fat[SUPER] = BUSY;
-	fat[DIR] = BUSY;
-	for (int i = 0; i < n_fat_blocks; i++) {
-		fat[TABLE + i] = BUSY;
-	}
+    // Gravar FAT no disco
+    for (int i = 0; i < n_fat_blocks; i++) {
+        ds_write(TABLE + i, (char *)(fat + i * fat_entries_per_block));
+    }
 
-	// Escreve a FAT em blocos
-	for (int i = 0; i < n_fat_blocks; i++) {
-		ds_write(TABLE + i, (char *)(fat + i * fat_entries_per_block));
-	}
-
-	free(fat); // como ainda não montou, não precisa manter em RAM
-	return 0;
+    free(fat);
+    return 0;
 }
-
 
 void fat_debug() {
 	printf("===== fat_debug() =====\n");
@@ -353,80 +348,81 @@ int fat_read(char *name, char *buff, int length, int offset) {
 
 //Retorna a quantidade de caracteres escritos
 int fat_write(char *name, const char *buff, int length, int offset) {
-	if (!mountState || !buff || length <= 0 || offset < 0) return -1;
+    if (!mountState || !buff || length <= 0 || offset < 0) return -1;
 
-	// 1. Encontra o arquivo
-	for (int i = 0; i < N_ITEMS; i++) {
-		if (dir[i].used == OK && strcmp(dir[i].name, name) == 0) {
-			int written = 0;
-			int inner_offset = offset;
-			int b = dir[i].first;
-			int prev = -1;
+    for (int i = 0; i < N_ITEMS; i++) {
+        if (dir[i].used == OK && strcmp(dir[i].name, name) == 0) {
+            int written = 0;
+            int inner_offset = offset;
+            int b = dir[i].first;
+            int prev = -1;
 
-			// Caso arquivo vazio, aloca primeiro bloco
-			if ((unsigned int)b >= sb.number_blocks) {
-				b = find_free_block();
-				if (b < 0) return written; // sem espaço
-				fat[b] = EOFF;
-				dir[i].first = b;
-			}
+            // Arquivo vazio: alocar primeiro bloco
+            if (b >= sb.number_blocks || b == (unsigned int)-1) {
+                b = find_free_block();
+                if (b < 0) return written;
+                fat[b] = EOFF;
+                dir[i].first = b;
+            }
 
-			// 2. Percorre até o bloco do offset
-			while (inner_offset >= BLOCK_SIZE) {
-				inner_offset -= BLOCK_SIZE;
-				prev = b;
-				if (fat[b] == EOFF) {
-					int novo = find_free_block();
-					if (novo < 0) return written;
-					fat[b] = novo;
-					fat[novo] = EOFF;
-				}
-				b = fat[b];
-			}
+            // Avançar até o bloco correspondente ao offset
+            while (inner_offset >= BLOCK_SIZE) {
+                inner_offset -= BLOCK_SIZE;
+                prev = b;
+                if (fat[b] == EOFF) {
+                    int novo = find_free_block();
+                    if (novo < 0) return written;
+                    fat[b] = novo;
+                    fat[novo] = EOFF;
+                }
+                b = fat[b];
+            }
 
-			// 3. Escreve os dados
-			char block[BLOCK_SIZE];
-			while (written < length) {
-				ds_read(b, block);
+            // Escrever os dados
+            char block[BLOCK_SIZE];
+            while (written < length) {
+                ds_read(b, block);
 
-				int chunk = BLOCK_SIZE - inner_offset;
-				if (chunk > (length - written)) chunk = length - written;
+                int chunk = BLOCK_SIZE - inner_offset;
+                if (chunk > (length - written)) {
+                    chunk = length - written;
+                }
 
-				memcpy(block + inner_offset, buff + written, chunk);
-				ds_write(b, block);
+                memcpy(block + inner_offset, buff + written, chunk);
+                ds_write(b, block);
 
-				written += chunk;
-				inner_offset = 0;
+                written += chunk;
+                inner_offset = 0;
 
-				// Próximo bloco
-				if (written < length) {
-					if (fat[b] == EOFF) {
-						int novo = find_free_block();
-						if (novo < 0) break;
-						fat[b] = novo;
-						fat[novo] = EOFF;
-					}
-					b = fat[b];
-				}
-			}
+                if (written >= length) break;
 
-			// Atualiza tamanho se crescer
-			if ((unsigned int)(offset + written) > dir[i].length) {
-				dir[i].length = offset + written;
-			}
+                if (fat[b] == EOFF) {
+                    int novo = find_free_block();
+                    if (novo < 0) break;
+                    fat[b] = novo;
+                    fat[novo] = EOFF;
+                }
 
-			// Atualiza diretório no disco
-			ds_write(DIR, (char *)dir);
+                b = fat[b];
+            }
 
-			// Atualiza FAT no disco
-			int per_block = BLOCK_SIZE / sizeof(unsigned int);
-			for (int j = 0; j < sb.n_fat_blocks; j++) {
-				ds_write(TABLE + j, (char *)(fat + j * per_block));
-			}
+            // Atualiza tamanho se necessário
+            if ((unsigned int)(offset + written) > dir[i].length) {
+                dir[i].length = offset + written;
+            }
 
-			return written;
-		}
-	}
+            // Atualizar diretório
+            ds_write(DIR, (char *)dir);
 
-	return -1; // arquivo não encontrado
+            // Atualizar FAT no disco
+            int per_block = BLOCK_SIZE / sizeof(unsigned int);
+            for (int j = 0; j < sb.n_fat_blocks; j++) {
+                ds_write(TABLE + j, (char *)(fat + j * per_block));
+            }
+
+            return written;
+        }
+    }
+
+    return -1;
 }
