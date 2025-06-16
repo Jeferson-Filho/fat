@@ -57,8 +57,8 @@ TBD
 <!-- CONTRIBUTING -->
 ## Contributors
 
-<a href="https://github.com/Jeferson-Filho/ChestXRayClassification/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Jeferson-Filho/ChestXRayClassification" alt="contrib.rocks image" />
+<a href="https://github.com/Jeferson-Filho/fat/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Jeferson-Filho/fat" alt="contrib.rocks image" />
 </a>
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
