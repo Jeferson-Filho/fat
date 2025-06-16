@@ -28,7 +28,7 @@
 
 <!-- ABOUT THE PROJECT -->
 ## About The Project
-TBD
+The objective of the work is to develop a file system based on file allocation tables (FAT).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -42,8 +42,8 @@ TBD
 ## Getting Started
 
 ### Roadmap
-- [ ] Testar o código diversas vezes
-- [ ] Detalhar as funções
+- [x] Testar o código diversas vezes
+- [x] Detalhar as funções
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
