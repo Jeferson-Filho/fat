@@ -8,53 +8,62 @@
 #include <strings.h>
 #include <unistd.h>
 
-#define SUPER 0
-#define TABLE 2
-#define DIR 1
+// Blocos reservados do sistema de arquivos simulados
+#define SUPER 0  // Bloco 0: Superbloco (metadados gerais do sistema de arquivos)
+#define DIR 1    // Bloco 1: Diretório (lista de arquivos)
+#define TABLE 2  // Bloco 2 em diante: FAT (File Allocation Table, tabela de alocação de blocos)
 
 #define SIZE 1024
 
-// the superblock
+// O superbloco
 #define MAGIC_N           0xAC0010DE
-typedef struct{
-	int magic;
-	int number_blocks;
-	int n_fat_blocks;
-	char empty[BLOCK_SIZE-3*sizeof(int)];
+
+// Estrutura do superbloco: guarda informações essenciais do sistema de arquivos
+typedef struct {
+	int magic;             // Valor mágico para validação do disco formatado
+	int number_blocks;     // Quantidade total de blocos no disco
+	int n_fat_blocks;      // Quantidade de blocos usados pela FAT
+	char empty[BLOCK_SIZE - 3 * sizeof(int)]; // Espaço restante para preencher o bloco (padding)
 } super;
+
 
 super sb;
 
-//item
+// Constantes e estrutura do diretório (lista de arquivos do sistema)
 #define MAX_LETTERS 6
 #define OK 1
 #define NON_OK 0
+
+// Cada entrada no diretório representa um arquivo
 typedef struct{
-	unsigned char used;
+	unsigned char used; // Marca se a entrada está em uso (OK ou NON_OK)
 	char name[MAX_LETTERS+1];
 	unsigned int length;
-	unsigned int first;
+	unsigned int first; // Bloco inicial onde os dados do arquivo estão armazenados
 } dir_item;
 
 #define N_ITEMS (BLOCK_SIZE / sizeof(dir_item))
 dir_item dir[N_ITEMS];
 
-// table
-#define FREE 0
-#define EOFF 1
-#define BUSY 2
+// Estados possíveis dos blocos na FAT
+#define FREE 0   // Bloco livre, pode ser usado
+#define EOFF 1   // Fim de arquivo (último bloco de um arquivo)
+#define BUSY 2   // Bloco reservado ou em uso (sistema ou arquivo)
+
 unsigned int *fat;
 
-int mountState = 0;
+int mountState = 0; // Indica se o sistema de arquivos foi montado (1) ou não (0)
 
+// Função utilitária: encontra o próximo bloco livre na FAT
 int find_free_block() {
 	for (int i = 0; i < sb.number_blocks; i++) {
 		if (fat[i] == FREE) return i;
 	}
-	return -1;
+	return -1;  // Nenhum bloco disponível
 }
 
-
+// A fat_format zera o disco, cria a base estrutural do sistema FAT 
+//e garante que os blocos e diretórios estejam prontos para uso.
 int fat_format() {
     if (mountState) return -1;
 
@@ -70,18 +79,21 @@ int fat_format() {
     sb.number_blocks = n_blocks;
     sb.n_fat_blocks = n_fat_blocks;
     memset(sb.empty, 0, sizeof(sb.empty));
+
     ds_write(SUPER, (char *)&sb);
 
-    // Diretório
+    // Inicializa o diretório com entradas vazias
     for (int i = 0; i < N_ITEMS; i++) {
         dir[i].used = NON_OK;
         memset(dir[i].name, 0, MAX_LETTERS + 1);
         dir[i].length = 0;
         dir[i].first = (unsigned int)-1;
     }
+
+	// Escreve o diretório no bloco 1 do disco
     ds_write(DIR, (char *)dir);
 
-    // FAT
+    // Aloca a FAT em memória (um vetor com n_blocks posições)
     fat = malloc(n_blocks * sizeof(unsigned int));
     if (!fat) return -1;
 
@@ -89,14 +101,14 @@ int fat_format() {
         fat[i] = FREE;
     }
 
-    // Reservar blocos do sistema
+    // Reserva os blocos que são usados pelo sistema (super, dir, e blocos da FAT)
     fat[SUPER] = BUSY;
     fat[DIR] = BUSY;
     for (int i = 0; i < n_fat_blocks; i++) {
         fat[TABLE + i] = BUSY;
     }
 
-    // Gravar FAT no disco
+    // Grava a FAT no disco, bloco por bloco
     for (int i = 0; i < n_fat_blocks; i++) {
         ds_write(TABLE + i, (char *)(fat + i * fat_entries_per_block));
     }
@@ -105,10 +117,12 @@ int fat_format() {
     return 0;
 }
 
+// fat_debug() serve para verificar se a simulação do sistema de arquivos está funcionando corretamente,
+// permitindo o usuário visualizar o estado interno do sistema FAT.
 void fat_debug() {
 	printf("===== fat_debug() =====\n");
 
-	// Ler superbloco
+	// Lê o superbloco (bloco 0)
 	ds_read(SUPER, (char *)&sb);
 	printf("super bloco:\n");
 
@@ -122,7 +136,7 @@ void fat_debug() {
 	printf("%d blocos\n", sb.number_blocks);
 	printf("%d bloco%s fat\n", sb.n_fat_blocks, sb.n_fat_blocks > 1 ? "s" : "");
 
-	// Ler diretório
+	// Lê o diretório (bloco 1) contendo as entradas de arquivos
 	ds_read(DIR, (char *)dir);
 
 	// Carregar FAT da imagem do disco
@@ -133,6 +147,7 @@ void fat_debug() {
 		return;
 	}
 
+	// Lê os blocos da FAT (blocos 2 em diante)
 	int entries_per_block = BLOCK_SIZE / sizeof(unsigned int);
 	for (int i = 0; i < sb.n_fat_blocks; i++) {
 		ds_read(TABLE + i, (char *)(fat + i * entries_per_block));
@@ -149,9 +164,11 @@ void fat_debug() {
 				unsigned int b = dir[i].first;
 				while (1) {
 					printf("%u", b);
+
+					// Se encontrou o fim da cadeia, para
 					if (fat[b] == EOFF) break;
 
-					// Proteção extra
+					// Proteção extra ;)
 					if (fat[b] >= sb.number_blocks || fat[b] == b) {
 						printf(" [erro na FAT]");
 						break;
@@ -170,9 +187,12 @@ void fat_debug() {
 	free(fat);
 }
 
-
+// Carrega os metadados do disco para a RAM
+// Tudo isso fica em memória para operações futuras
 int fat_mount() {
 	printf("===== fat_mount() =====\n");
+
+	// Impede montar mais de uma vez
 	if (mountState) return -1;
 
 	// Ler superbloco
@@ -185,22 +205,27 @@ int fat_mount() {
 	// Ler diretório
 	ds_read(DIR, (char *)dir);
 
-	// Alocar memória e ler FAT
+	// Aloca memória para carregar a FAT
 	fat = malloc(n_blocks * sizeof(unsigned int));
 	if (!fat) return -1;
 
+	// Lê os blocos da FAT
 	int entries_per_block = BLOCK_SIZE / sizeof(unsigned int);
 	for (int i = 0; i < n_fat_blocks; i++) {
 		ds_read(TABLE + i, (char *)(fat + i * entries_per_block));
 	}
 
+	// Marca que o sistema está montado
 	mountState = 1;
 	return 0;
 }
 
-
+//  fat_create() é responsável por registrar um novo arquivo na FAT
+// o conteúdo é adicionado depois via fat_write.
 int fat_create(char *name) {
 	printf("===== fat_create() =====\n");
+
+	// Verifica se o sistema está montado
 	if (!mountState) return -1;
 
 	// Validação do nome
@@ -232,7 +257,7 @@ int fat_create(char *name) {
 	return -1;
 }
 
-
+// fat_delete() remove logicamente um arquivo da FAT
 int fat_delete(char *name) {
 	if (!mountState) return -1;
 
@@ -277,6 +302,7 @@ int fat_delete(char *name) {
 }
 
 
+// retorna o tamanho em bytes de um arquivo 
 int fat_getsize(char *name) {
 	printf("===== fat_getsize() =====\n");
 	if (!mountState) return -1;
@@ -291,6 +317,7 @@ int fat_getsize(char *name) {
 }
 
 
+// fat_read lê dados de um arquivo armazenado no FAT
 //Retorna a quantidade de caracteres lidos
 int fat_read(char *name, char *buff, int length, int offset) {
 	printf("===== fat_read() =====\n");
@@ -346,6 +373,7 @@ int fat_read(char *name, char *buff, int length, int offset) {
 	return -1; // arquivo não encontrado
 }
 
+// fat_write implementa a escrita de dados em um arquivo da FAT
 //Retorna a quantidade de caracteres escritos
 int fat_write(char *name, const char *buff, int length, int offset) {
     if (!mountState || !buff || length <= 0 || offset < 0) return -1;
