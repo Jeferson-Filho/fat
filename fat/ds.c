@@ -6,16 +6,19 @@
 
 #include "ds.h"
 
-static int number_blocks=0;
-static int number_reads=0;
-static int number_writes=0;
-static FILE *disk;
+static int number_blocks = 0;   // Quantidade total de blocos do disco simulado
+static int number_reads = 0;    // Contador de leituras feitas no disco
+static int number_writes = 0;   // Contador de escritas feitas no disco
+static FILE *disk;              // Ponteiro para o arquivo que simula o disco
 
+// Retorna o tamanho do disco simulado em número de blocos.
 int ds_size()
 {
 	return number_blocks;
 }
 
+// Inicializar o disco simulado, criando um arquivo com o tamanho necessário para representar os blocos.
+// Este arquivo será manipulado como se fosse um disco real, com blocos de tamanho fixo (BLOCK_SIZE).
 int ds_init( const char *filename, int n )
 {
 	disk = fopen(filename,"r+");
@@ -31,6 +34,9 @@ int ds_init( const char *filename, int n )
 	return 1;
 }
 
+// Verificar se os parâmetros de leitura/escrita são válidos:
+// Número de bloco não pode ser negativo ou ultrapassar o tamanho do disco.
+// O ponteiro do buffer precisa estar válido.
 static void check( int number, const void *buff )
 {
 	if(number<0) {
@@ -49,6 +55,8 @@ static void check( int number, const void *buff )
 	}
 }
 
+// Ler um bloco específico do "disco" (arquivo) e copiar seu conteúdo para o buffer.
+// Usado por sistemas de arquivos simulados (ex: FAT) para acessar dados.
 void ds_read( int number, char *buff )
 {
 	int x;
@@ -64,6 +72,8 @@ void ds_read( int number, char *buff )
 	}
 }
 
+// Gravar um bloco completo no "disco", sobrescrevendo o que havia antes.
+// Essencial para simular o comportamento de escrita em sistemas de arquivos.
 void ds_write( int number, const char *buff )
 {
 	int x;
@@ -79,6 +89,7 @@ void ds_write( int number, const char *buff )
 	}
 }
 
+// Fechar o arquivo do disco simulado e exibir o número total de leituras e escritas feitas.
 void ds_close()
 {
 	printf("%d reads\n",number_reads);
